@@ -1,7 +1,7 @@
 import os
 
 # --- PASTE YOUR API KEY INSIDE THE QUOTES BELOW ---
-my_api_key = "AIzaSyAndiFsrUVqlTHZfBtSrkMlst1BOJvLIFc" 
+my_api_key = "put you api key" 
 # --------------------------------------------------
 
 file_path = ".env"
