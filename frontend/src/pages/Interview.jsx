@@ -52,35 +52,70 @@ const Interview = () => {
   }, []);
 
   const toggleRecording = async () => {
-    if (!isRecording) {
+    if (isRecording) {
+      // --- 1. STOPPING THE MIC ---
+      setIsRecording(false);
+      
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        mediaRecorderRef.current.stop(); 
+      }
+
+    } else {
+      // --- 2. STARTING THE MIC ---
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorderRef.current = new MediaRecorder(stream);
+        
+        const options = MediaRecorder.isTypeSupported("audio/webm") 
+          ? { mimeType: "audio/webm" } 
+          : {};
+          
+        const mediaRecorder = new MediaRecorder(stream, options);
+        mediaRecorderRef.current = mediaRecorder;
 
-        mediaRecorderRef.current.ondataavailable = (event) => {
-          if (event.data.size > 0 && socketRef.current.readyState === WebSocket.OPEN) {
+        // Fire every 1 second to send chunks
+        mediaRecorder.ondataavailable = (event) => {
+          // 🔥 FIX: Changed 'ws' to 'socketRef'
+          if (event.data.size > 0 && socketRef.current?.readyState === WebSocket.OPEN) {
             socketRef.current.send(event.data);
           }
         };
 
-        mediaRecorderRef.current.start(1000); 
+        mediaRecorder.onstop = () => {
+          stream.getTracks().forEach(track => track.stop());
+          
+          // 🔥 FIX: Changed 'ws' to 'socketRef'
+          if (socketRef.current?.readyState === WebSocket.OPEN) {
+            socketRef.current.send(JSON.stringify({ type: "stop" }));
+          }
+        };
+
+        mediaRecorder.start(1000); 
         setIsRecording(true);
+        
       } catch (err) {
-        console.error("Error accessing microphone:", err);
-      }
-    } else {
-      if(mediaRecorderRef.current) mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-        socketRef.current.send(JSON.stringify({ type: "stop" }));
+        console.error("Microphone access denied or error:", err);
+        alert("Please allow microphone permissions.");
+        setIsRecording(false);
       }
     }
   };
 
   // --- 2. END INTERVIEW & FETCH REPORT ---
+  // --- 2. END INTERVIEW & FETCH REPORT ---
   const finishInterview = async () => {
+    // 1. Stop Recording if active
     if (isRecording) toggleRecording();
+    
+    // 2. Stop FaceMesh Camera
     if (cameraRef.current) await cameraRef.current.stop();
+
+    // 🔥 3. KILL ALL HARDWARE TRACKS (Fixes the background running issue)
+    if (webcamRef.current && webcamRef.current.stream) {
+        webcamRef.current.stream.getTracks().forEach(track => track.stop());
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.stream) {
+        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+    }
     
     try {
         // Fetch the Chat History from Backend
@@ -90,8 +125,8 @@ const Interview = () => {
         // Merge Backend Data with Frontend Cheat Data
         const finalReport = {
             ...data,
-            integrity_score: integrityScore, // Add Score
-            violations: violationCount       // Add Count
+            integrity_score: integrityScore,
+            violations: violationCount       
         };
 
         setReportData(finalReport);
