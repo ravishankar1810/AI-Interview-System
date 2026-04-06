@@ -26,7 +26,7 @@ const Interview = () => {
 
   // --- 1. WEBSOCKET LOGIC ---
   useEffect(() => {
-    socketRef.current = new WebSocket("ws://127.0.0.1:8000/ws");
+    socketRef.current = new WebSocket("wss://ai-interview-system-sw5c.onrender.com/ws");
 
     socketRef.current.onopen = () => setStatus("Online");
     socketRef.current.onclose = () => setStatus("Disconnected");
@@ -119,7 +119,7 @@ const Interview = () => {
     
     try {
         // Fetch the Chat History from Backend
-        const response = await fetch("http://127.0.0.1:8000/report");
+        const response = await fetch("https://ai-interview-system-sw5c.onrender.com/report");
         const data = await response.json();
         
         // Merge Backend Data with Frontend Cheat Data
