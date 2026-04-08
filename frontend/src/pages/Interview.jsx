@@ -2,19 +2,18 @@ import React, { useState, useEffect, useRef } from 'react';
 import Webcam from 'react-webcam';
 import { FaceMesh } from '@mediapipe/face_mesh';
 import { Camera } from '@mediapipe/camera_utils';
-import { Mic, MicOff, PhoneOff, BarChart3, Eye, FileText, CheckCircle, AlertTriangle } from 'lucide-react';
-
-const Interview = () => {
+import { Mic, MicOff, PhoneOff, BarChart3, Eye, FileText, CheckCircle, AlertTriangle, ChevronDown } from 'lucide-react';
+// 🔥 NEW: Accept the 'user' prop from App.jsx
+// 🔥 FIX 1: Add onGoHome to the props here
+const Interview = ({ user, onGoHome, onLogout, onGoToHistory }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [status, setStatus] = useState("Connecting...");
   const [gazeStatus, setGazeStatus] = useState("Focused");
   const [transcript, setTranscript] = useState(""); 
   
-  // --- NEW: CHEAT DETECTION STATE ---
   const [violationCount, setViolationCount] = useState(0);
   const [integrityScore, setIntegrityScore] = useState(100);
 
-  // Report State
   const [showReport, setShowReport] = useState(false);
   const [reportData, setReportData] = useState(null);
 
@@ -23,10 +22,12 @@ const Interview = () => {
   const mediaRecorderRef = useRef(null);
   const faceMeshRef = useRef(null); 
   const cameraRef = useRef(null);   
-
+  
   // --- 1. WEBSOCKET LOGIC ---
   useEffect(() => {
-    socketRef.current = new WebSocket("wss://ai-interview-system-sw5c.onrender.com/ws");
+    // ⚠️ DEPLOYMENT NOTE: Change this to your wss:// Render URL when deploying!
+    socketRef.current = new WebSocket("ws://127.0.0.1:8000/ws"); 
+    // socketRef.current = new WebSocket("wss://ai-interview-system-sw5c.onrender.com/ws");
 
     socketRef.current.onopen = () => setStatus("Online");
     socketRef.current.onclose = () => setStatus("Disconnected");
@@ -53,7 +54,6 @@ const Interview = () => {
 
   const toggleRecording = async () => {
     if (isRecording) {
-      // --- 1. STOPPING THE MIC ---
       setIsRecording(false);
       
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
@@ -61,7 +61,6 @@ const Interview = () => {
       }
 
     } else {
-      // --- 2. STARTING THE MIC ---
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         
@@ -72,9 +71,7 @@ const Interview = () => {
         const mediaRecorder = new MediaRecorder(stream, options);
         mediaRecorderRef.current = mediaRecorder;
 
-        // Fire every 1 second to send chunks
         mediaRecorder.ondataavailable = (event) => {
-          // 🔥 FIX: Changed 'ws' to 'socketRef'
           if (event.data.size > 0 && socketRef.current?.readyState === WebSocket.OPEN) {
             socketRef.current.send(event.data);
           }
@@ -83,9 +80,12 @@ const Interview = () => {
         mediaRecorder.onstop = () => {
           stream.getTracks().forEach(track => track.stop());
           
-          // 🔥 FIX: Changed 'ws' to 'socketRef'
           if (socketRef.current?.readyState === WebSocket.OPEN) {
-            socketRef.current.send(JSON.stringify({ type: "stop" }));
+            // 🔥 NEW: Send the user's email to the backend so it knows who is speaking
+            socketRef.current.send(JSON.stringify({ 
+                type: "stop",
+                email: user?.email || "guest"
+            }));
           }
         };
 
@@ -101,15 +101,11 @@ const Interview = () => {
   };
 
   // --- 2. END INTERVIEW & FETCH REPORT ---
-  // --- 2. END INTERVIEW & FETCH REPORT ---
   const finishInterview = async () => {
-    // 1. Stop Recording if active
+    window.speechSynthesis.cancel();
     if (isRecording) toggleRecording();
-    
-    // 2. Stop FaceMesh Camera
     if (cameraRef.current) await cameraRef.current.stop();
 
-    // 🔥 3. KILL ALL HARDWARE TRACKS (Fixes the background running issue)
     if (webcamRef.current && webcamRef.current.stream) {
         webcamRef.current.stream.getTracks().forEach(track => track.stop());
     }
@@ -118,11 +114,15 @@ const Interview = () => {
     }
     
     try {
-        // Fetch the Chat History from Backend
-        const response = await fetch("https://ai-interview-system-sw5c.onrender.com/report");
+        // 🔥 NEW: Pass the user's email into the URL to only fetch THEIR history
+        const userEmail = user?.email || "guest";
+        
+        // ⚠️ DEPLOYMENT NOTE: Change this to your https:// Render URL when deploying!
+        const response = await fetch(`http://127.0.0.1:8000/report?email=${userEmail}`);
+        // const response = await fetch(`https://ai-interview-system-sw5c.onrender.com/report?email=${userEmail}`);
+
         const data = await response.json();
         
-        // Merge Backend Data with Frontend Cheat Data
         const finalReport = {
             ...data,
             integrity_score: integrityScore,
@@ -136,19 +136,14 @@ const Interview = () => {
         alert("Could not generate report. Is backend running?");
     }
   };
-  // --- NEW: TEXT TO SPEECH FUNCTION ---
+
   const speak = (text) => {
-    // Stop any previous speech so they don't overlap
     window.speechSynthesis.cancel();
-    
     const utterance = new SpeechSynthesisUtterance(text);
-    // Optional: Change voice/speed
-    // utterance.rate = 1.0; 
-    // utterance.pitch = 1.0;
-    
     window.speechSynthesis.speak(utterance);
   };
-  // --- 3. VISION LOGIC (UPDATED FOR CHEATING) ---
+
+  // --- 3. VISION LOGIC ---
   useEffect(() => {
     const faceMesh = new FaceMesh({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
@@ -185,13 +180,10 @@ const Interview = () => {
       const landmarks = results.multiFaceLandmarks[0];
       const nose = landmarks[1];
       
-      // CHEAT DETECTION LOGIC
-      // If nose moves too far left (x > 0.6) or right (x < 0.4)
       if (nose.x < 0.4 || nose.x > 0.6) {
           setGazeStatus("⚠️ DISTRACTED");
-          // Increase violation count occasionally (rate limiter could be added here)
           setViolationCount(prev => prev + 1);
-          setIntegrityScore(prev => Math.max(0, prev - 0.5)); // Lose 0.5 points per frame
+          setIntegrityScore(prev => Math.max(0, prev - 0.5));
       } else {
           setGazeStatus("Focused");
       }
@@ -218,16 +210,16 @@ const Interview = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                     <div className="bg-slate-700/50 p-6 rounded-2xl">
-                        <h3 className="text-slate-400 text-sm mb-2">Total Questions</h3>
-                        <p className="text-4xl font-bold text-blue-400">{reportData.total_questions || 0}</p>
+                        <h3 className="text-slate-400 text-sm mb-2">Candidate Email</h3>
+                        <p className="text-xl font-bold text-blue-400 break-words">{reportData.candidate_email}</p>
                     </div>
                     <div className="bg-slate-700/50 p-6 rounded-2xl">
                         <h3 className="text-slate-400 text-sm mb-2">Suspicious Movements</h3>
                         <p className="text-4xl font-bold text-yellow-400">{reportData.violations}</p>
                     </div>
                     <div className="bg-slate-700/50 p-6 rounded-2xl">
-                        <h3 className="text-slate-400 text-sm mb-2">Overall Feedback</h3>
-                        <p className="text-sm text-slate-200">{reportData.overall_feedback}</p>
+                        <h3 className="text-slate-400 text-sm mb-2">Total Questions</h3>
+                        <p className="text-4xl font-bold text-white">{reportData.total_questions || 0}</p>
                     </div>
                 </div>
 
@@ -262,92 +254,88 @@ const Interview = () => {
 
   // --- 5. MAIN INTERVIEW VIEW ---
   return (
-    <div className="min-h-screen bg-background text-white flex flex-col">
-      <header className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
-        <div className="font-bold text-xl tracking-tight">AI<span className="text-primary">Interview</span></div>
+    <div className="h-screen bg-slate-950 text-white flex flex-col overflow-hidden">
+      <header className="h-16 px-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/80 backdrop-blur-md shrink-0">
+        <div onClick={onGoHome} className="font-bold text-xl tracking-tight cursor-pointer hover:opacity-80 transition-opacity">
+          AI<span className="text-primary">Interview</span>
+        </div>
         <div className="flex items-center gap-4">
-          <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono border ${gazeStatus === 'Focused' ? 'border-green-900 bg-green-900/20 text-green-400' : 'border-red-900 bg-red-900/20 text-red-400'}`}>
+          {user && (
+            <div className="relative group z-50">
+              <div className="px-4 py-1.5 rounded-full border border-slate-700 text-xs bg-slate-800/80 cursor-pointer flex items-center gap-2">
+                {user.email} <ChevronDown size={12} />
+              </div>
+              <div className="absolute right-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
+                <button onClick={onGoToHistory} className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white rounded-t-xl">
+                  User History
+                </button>
+                <button onClick={onLogout} className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-slate-700 hover:text-red-300 rounded-b-xl border-t border-slate-700">
+                  Log Out
+                </button>
+              </div>
+            </div>
+          )}
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-mono border ${gazeStatus === 'Focused' ? 'border-green-900 bg-green-900/20 text-green-400' : 'border-red-900 bg-red-900/20 text-red-400'}`}>
             {gazeStatus === 'Focused' ? <Eye size={12} /> : <AlertTriangle size={12} />}
             {gazeStatus}
           </div>
-          <button 
-            onClick={finishInterview}
-            className="px-4 py-2 bg-red-500/10 text-red-500 border border-red-500/50 rounded-lg hover:bg-red-500 hover:text-white transition-all text-sm font-semibold flex items-center gap-2"
-          >
-            <PhoneOff size={16} /> End Interview
+          <button onClick={finishInterview} className="px-4 py-1.5 bg-red-500/10 text-red-500 border border-red-500/50 rounded-lg hover:bg-red-500 hover:text-white transition-all text-sm font-semibold flex items-center gap-2">
+            <PhoneOff size={14} /> End Interview
           </button>
         </div>
       </header>
 
-      <main className="flex-1 p-6 grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-7xl mx-auto w-full">
-        <div className="lg:col-span-2 flex flex-col gap-6">
-          <div className="flex-1 bg-slate-800 rounded-3xl overflow-hidden relative shadow-2xl border border-slate-700 group">
-            <Webcam
-              ref={webcamRef}
-              audio={false}
-              mirrored={true} 
-              onUserMedia={onCamLoaded}
-              className="w-full h-full object-cover" 
-            />
-            {transcript && (
-              <div className="absolute bottom-8 left-8 right-8 z-20">
-                <div className="bg-black/60 backdrop-blur-md p-4 rounded-xl border border-white/10 max-h-40 overflow-y-auto">
-                  <p className="text-sm font-medium text-slate-100 whitespace-pre-wrap">{transcript}</p>
-                </div>
-              </div>
-            )}
-            
-            {/* CHEAT WARNING OVERLAY */}
-            {gazeStatus !== 'Focused' && (
-                <div className="absolute inset-0 border-4 border-red-500/50 z-10 pointer-events-none animate-pulse"></div>
-            )}
-          </div>
+      <main className="flex-1 p-4 md:p-6 grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-[1600px] mx-auto w-full min-h-0">
+        <div className="lg:col-span-2 relative rounded-3xl overflow-hidden bg-black shadow-2xl border border-slate-800 flex items-center justify-center">
+          <Webcam ref={webcamRef} audio={false} mirrored={true} onUserMedia={onCamLoaded} className="absolute inset-0 w-full h-full object-cover" />
           
-          <div className="bg-surface border border-slate-700 p-4 rounded-2xl flex items-center justify-center gap-6 shadow-lg">
-            <button 
-              onClick={toggleRecording}
-              className={`p-6 rounded-full transition-all transform hover:scale-105 shadow-xl ${
-                isRecording ? 'bg-red-500 shadow-red-500/30' : 'bg-primary shadow-primary/30'
-              }`}
-            >
-              {isRecording ? <MicOff size={28} /> : <Mic size={28} />}
+          {transcript && (
+            <div className="absolute top-6 left-6 right-6 z-20">
+              <div className="bg-slate-900/80 backdrop-blur-md p-4 rounded-xl border border-slate-700 max-h-32 overflow-y-auto custom-scrollbar">
+                <p className="text-sm font-medium text-slate-100 whitespace-pre-wrap">{transcript}</p>
+              </div>
+            </div>
+          )}
+          
+          {gazeStatus !== 'Focused' && (
+            <div className="absolute inset-0 border-4 border-red-500/50 z-10 pointer-events-none animate-pulse"></div>
+          )}
+
+          <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-30 flex items-center gap-4 bg-slate-900/90 backdrop-blur-xl px-8 py-3 rounded-full border border-slate-700 shadow-2xl">
+            <button onClick={toggleRecording} className={`p-4 rounded-full transition-all transform hover:scale-105 shadow-xl ${isRecording ? 'bg-red-500 shadow-red-500/30' : 'bg-primary shadow-primary/30'}`}>
+              {isRecording ? <MicOff size={24} /> : <Mic size={24} />}
             </button>
-            <p className="text-sm font-medium text-slate-400 absolute mt-20">
-              {isRecording ? "Listening..." : "Tap to Speak"}
-            </p>
+            <div className="text-sm font-medium text-slate-300 w-24 text-center">
+              {isRecording ? <span className="text-red-400 animate-pulse">Listening...</span> : "Tap to Speak"}
+            </div>
           </div>
         </div>
 
-        <div className="bg-surface border border-slate-700 rounded-3xl p-6 flex flex-col shadow-xl">
-           <h3 className="font-semibold text-slate-300 flex items-center gap-2 mb-6">
-             <BarChart3 size={18} className="text-neon" /> Live Proctoring
-           </h3>
-           <div className="space-y-6 flex-1 overflow-y-auto">
-             <div className="p-4 bg-slate-800 rounded-xl border border-slate-700">
-                <p className="text-xs text-slate-400 mb-1">Gaze Status</p>
-                <p className={`text-xl font-mono ${gazeStatus === 'Focused' ? 'text-green-400' : 'text-red-400'}`}>
-                    {gazeStatus}
-                </p>
-             </div>
-             
-             <div className="p-4 bg-slate-800 rounded-xl border border-slate-700">
-                <p className="text-xs text-slate-400 mb-1">Integrity Score</p>
-                <div className="flex items-end gap-2">
-                    <p className="text-3xl font-bold text-white">{Math.round(integrityScore)}%</p>
-                </div>
-                <div className="mt-2 h-2 bg-slate-700 rounded-full overflow-hidden">
-                  <div 
-                    className={`h-full transition-all duration-500 ${integrityScore > 80 ? 'bg-green-500' : 'bg-red-500'}`} 
-                    style={{ width: `${integrityScore}%` }} 
-                  />
-                </div>
-             </div>
-
-             <div className="p-4 bg-slate-800 rounded-xl border border-slate-700">
-                <p className="text-xs text-slate-400 mb-1">Violations Detected</p>
-                <p className="text-xl font-mono text-yellow-400">{violationCount}</p>
-             </div>
-           </div>
+        <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-6 flex flex-col h-full overflow-hidden">
+          <h3 className="font-semibold text-slate-300 flex items-center gap-2 mb-6 shrink-0">
+            <BarChart3 size={18} className="text-blue-500" /> Live Proctoring
+          </h3>
+          <div className="space-y-4 flex-1 overflow-y-auto custom-scrollbar pr-2">
+            <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700/50">
+              <p className="text-xs text-slate-400 mb-1">Gaze Status</p>
+              <p className={`text-xl font-mono ${gazeStatus === 'Focused' ? 'text-green-400' : 'text-red-400'}`}>
+                {gazeStatus}
+              </p>
+            </div>
+            <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700/50">
+              <p className="text-xs text-slate-400 mb-1">Integrity Score</p>
+              <div className="flex items-end gap-2">
+                <p className="text-3xl font-bold text-white">{Math.round(integrityScore)}%</p>
+              </div>
+              <div className="mt-2 h-2 bg-slate-700 rounded-full overflow-hidden">
+                <div className={`h-full transition-all duration-500 ${integrityScore > 80 ? 'bg-green-500' : 'bg-red-500'}`} style={{ width: `${integrityScore}%` }} />
+              </div>
+            </div>
+            <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700/50">
+              <p className="text-xs text-slate-400 mb-1">Violations Detected</p>
+              <p className="text-xl font-mono text-yellow-400">{violationCount}</p>
+            </div>
+          </div>
         </div>
       </main>
     </div>

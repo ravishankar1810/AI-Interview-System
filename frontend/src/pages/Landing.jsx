@@ -1,41 +1,45 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Bot, ChevronRight, ShieldCheck } from 'lucide-react';
-import SmokeBackground from '../components/SmokeBackground'; // <--- IMPORT THIS
+import { Bot, ChevronRight, ShieldCheck, ChevronDown } from 'lucide-react';
+import SmokeBackground from '../components/SmokeBackground'; 
+// import { Bot, ChevronRight, ShieldCheck, ChevronDown } from 'lucide-react';
 
-const Landing = () => {
-  const navigate = useNavigate();
+// 🔥 FIX 1: Accept user and onStartInterview as props
+const Landing = ({ user, onStartInterview, onLogout, onGoToHistory }) => {  
+  // 🔥 FIX 2: Removed useNavigate() since we are using state-based routing in App.jsx
 
   return (
-    // Change background to solid dark color so smoke shows up clearly
-    <div className="min-h-screen bg-slate-950 text-white overflow-hidden relative">
-      
-      {/* --- ADD SMOKE COMPONENT HERE --- */}
+    <div className="min-h-screen bg-slate-950 text-white overflow-hidden relative flex flex-col">
       <SmokeBackground />
-      
-      {/* Overlay Gradient for Vignette effect (keeps text readable) */}
       <div className="absolute inset-0 bg-gradient-to-b from-slate-950/80 via-transparent to-slate-950/80 pointer-events-none z-0" />
 
-      {/* Navbar */}
-      <nav className="relative z-10 flex justify-between items-center p-6 max-w-7xl mx-auto">
+      <nav className="relative z-10 flex justify-between items-center p-6 max-w-7xl mx-auto w-full">
         <div className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-neon to-primary flex items-center gap-2">
           <Bot className="text-neon" /> AIInterview.Pro
         </div>
-        <button className="px-5 py-2 rounded-full border border-slate-700 hover:bg-slate-800 transition text-sm bg-slate-900/50 backdrop-blur-md">Sign In</button>
+        {user && (
+          <div className="relative group z-50">
+            <div className="px-5 py-2 rounded-full border border-slate-700 text-sm bg-slate-900/50 backdrop-blur-md cursor-pointer flex items-center gap-2 transition-colors hover:bg-slate-800">
+              {user.name} <ChevronDown size={14} />
+            </div>
+            <div className="absolute right-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform translate-y-2 group-hover:translate-y-0">
+              <button onClick={onGoToHistory} className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white rounded-t-xl transition-colors">
+                User History
+              </button>
+              <button onClick={onLogout} className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-slate-700 hover:text-red-300 rounded-b-xl transition-colors border-t border-slate-700">
+                Log Out
+              </button>
+            </div>
+          </div>
+        )}
       </nav>
 
-      {/* Hero Section */}
-      <main className="relative z-10 max-w-7xl mx-auto px-6 mt-16 flex flex-col md:flex-row items-center gap-12">
-        <motion.div 
-          initial={{ opacity: 0, x: -50 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.8 }}
-          className="flex-1"
-        >
+      <main className="relative z-10 max-w-7xl mx-auto px-6 flex-1 flex flex-col md:flex-row items-center justify-center gap-12 w-full pb-12">
+        <motion.div initial={{ opacity: 0, x: -50 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.8 }} className="flex-1">
           <div className="inline-block px-4 py-1.5 rounded-full bg-slate-800/60 backdrop-blur-md border border-slate-700 text-neon text-xs font-semibold tracking-wide mb-6">
             NEW: REAL-TIME FEEDBACK ENGINE
           </div>
+          {user && <h2 className="text-2xl text-blue-400 mb-2">Welcome, {user.name}</h2>}
           <h1 className="text-5xl md:text-7xl font-bold leading-tight mb-6 drop-shadow-2xl">
             Master Your Interview <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-neon via-primary to-accent">With AI Precision</span>
@@ -43,12 +47,8 @@ const Landing = () => {
           <p className="text-slate-300 text-lg mb-8 max-w-lg leading-relaxed drop-shadow-lg">
             Experience the future of interview prep. Get real-time feedback on your speech, confidence, and technical accuracy as you speak.
           </p>
-          
           <div className="flex gap-4">
-            <button 
-              onClick={() => navigate('/setup')}
-              className="px-8 py-4 bg-primary hover:bg-blue-600 rounded-xl font-semibold flex items-center gap-2 shadow-lg shadow-primary/25 transition-all transform hover:scale-105"
-            >
+            <button onClick={onStartInterview} className="px-8 py-4 bg-primary hover:bg-blue-600 rounded-xl font-semibold flex items-center gap-2 shadow-lg shadow-primary/25 transition-all transform hover:scale-105">
               Start Interview <ChevronRight size={20} />
             </button>
             <button className="px-8 py-4 bg-slate-800/80 backdrop-blur-md hover:bg-slate-700 border border-slate-700 rounded-xl font-semibold transition-all">
@@ -57,13 +57,7 @@ const Landing = () => {
           </div>
         </motion.div>
 
-        {/* Hero Visual - Updated for better contrast */}
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.8, delay: 0.2 }}
-          className="flex-1 relative"
-        >
+        <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.8, delay: 0.2 }} className="flex-1 relative w-full">
           <div className="relative z-10 bg-slate-900/70 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 shadow-2xl">
             <div className="flex items-center gap-4 mb-6 border-b border-slate-700/50 pb-4">
               <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-neon to-primary flex items-center justify-center">
