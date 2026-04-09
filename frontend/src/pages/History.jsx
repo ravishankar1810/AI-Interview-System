@@ -9,7 +9,7 @@ const History = ({ user, onGoHome }) => {
     const fetchHistory = async () => {
       try {
         const userEmail = user?.email || "guest";
-        const response = await fetch(`http://127.0.0.1:8000/report?email=${userEmail}`);
+        const response = await fetch(`https://ai-interview-system-sw5c.onrender.com/report?email=${userEmail}`);
         const data = await response.json();
         
         // The backend returns an array of chats in "interview_history"

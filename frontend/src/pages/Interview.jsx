@@ -26,7 +26,7 @@ const Interview = ({ user, onGoHome, onLogout, onGoToHistory }) => {
   // --- 1. WEBSOCKET LOGIC ---
   useEffect(() => {
     // ⚠️ DEPLOYMENT NOTE: Change this to your wss:// Render URL when deploying!
-    socketRef.current = new WebSocket("ws://127.0.0.1:8000/ws"); 
+    socketRef.current = new WebSocket("wss://ai-interview-system-sw5c.onrender.com/ws"); 
     // socketRef.current = new WebSocket("wss://ai-interview-system-sw5c.onrender.com/ws");
 
     socketRef.current.onopen = () => setStatus("Online");
@@ -118,7 +118,7 @@ const Interview = ({ user, onGoHome, onLogout, onGoToHistory }) => {
         const userEmail = user?.email || "guest";
         
         // ⚠️ DEPLOYMENT NOTE: Change this to your https:// Render URL when deploying!
-        const response = await fetch(`http://127.0.0.1:8000/report?email=${userEmail}`);
+        const response = await fetch(`https://ai-interview-system-sw5c.onrender.com/report?email=${userEmail}`);
         // const response = await fetch(`https://ai-interview-system-sw5c.onrender.com/report?email=${userEmail}`);
 
         const data = await response.json();
